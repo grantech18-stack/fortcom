@@ -1,6 +1,6 @@
 // FORTCOM - Service Worker (modo app instalado)
-const CACHE='fortcom-v5';
-const ARQUIVOS=['./','./index.html'];
+const CACHE='fortcom-v4';
+const ARQUIVOS=['./','./dashboard-controle-obra.html','./index.html'];
 
 self.addEventListener('install', e=>{
   self.skipWaiting();
@@ -16,6 +16,6 @@ self.addEventListener('fetch', e=>{
       const copia=r.clone();
       caches.open(CACHE).then(c=>c.put(e.request,copia)).catch(()=>{});
       return r;
-    }).catch(()=>caches.match(e.request).then(r=>r||caches.match('./index.html')))
+    }).catch(()=>caches.match(e.request).then(r=>r||caches.match('./dashboard-controle-obra.html')))
   );
 });
