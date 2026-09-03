@@ -3684,5 +3684,158 @@ function renderDespesasPorObra(){
   window.addEventListener('resize',()=>{renderCharts(); renderFinanceChart(); renderCurvaS();});
 })();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3580adcb872f94d',t:'MTc4ODQ3Mjk4NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+
+<!-- ===================== SINCRONIZACAO FIREBASE (aditivo) ===================== -->
+<style>
+#fbChip{position:fixed;left:10px;bottom:10px;z-index:9998;display:flex;align-items:center;gap:6px;
+  background:rgba(17,24,39,.88);color:#fff;font:600 11px/1 system-ui,sans-serif;
+  padding:7px 11px;border-radius:999px;box-shadow:0 4px 14px rgba(0,0,0,.28);cursor:pointer;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#fbChip .pt{width:7px;height:7px;border-radius:50%;background:#10b981;flex:none}
+#fbChip.off .pt{background:#f59e0b}
+#fbChip.err .pt{background:#ef4444}
+@media print{#fbChip{display:none}}
+#pinWrap{position:fixed;inset:0;z-index:99999;background:#0f172a;display:flex;align-items:center;
+  justify-content:center;padding:24px}
+#pinBox{width:100%;max-width:330px;text-align:center;color:#fff;font-family:system-ui,sans-serif}
+#pinBox h2{margin:14px 0 4px;font-size:19px;letter-spacing:.02em}
+#pinBox p{margin:0 0 18px;font-size:12.5px;opacity:.65}
+#pinInput{width:100%;padding:14px;border-radius:12px;border:1px solid #334155;background:#1e293b;
+  color:#fff;font-size:21px;text-align:center;letter-spacing:.34em;outline:none;box-sizing:border-box}
+#pinInput:focus{border-color:#6366f1}
+#pinBtn{width:100%;margin-top:11px;padding:14px;border:0;border-radius:12px;background:#6366f1;
+  color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+#pinErr{color:#f87171;font-size:12.5px;margin-top:10px;min-height:16px}
+</style>
+
+<div id="pinWrap">
+  <div id="pinBox">
+    <div id="pinLogo"></div>
+    <h2>FORTCOM</h2>
+    <p>Controle de Obras</p>
+    <input id="pinInput" type="password" inputmode="numeric" placeholder="＿ ＿ ＿ ＿ ＿ ＿" autocomplete="off">
+    <button id="pinBtn">Entrar</button>
+    <div id="pinErr"></div>
+  </div>
+</div>
+
+<div id="fbChip" title="Toque para sincronizar agora"><span class="pt"></span><span id="fbTxt">Iniciando…</span></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+  var PIN   = '2604';
+  var CFG   = {
+    apiKey:"AIzaSyBGEELOTe8rlFQXAlsNAJVPf7BaSLKVahw",
+    authDomain:"fortcom-c8f39.firebaseapp.com",
+    projectId:"fortcom-c8f39",
+    storageBucket:"fortcom-c8f39.firebasestorage.app",
+    messagingSenderId:"932715602737",
+    appId:"1:932715602737:web:f4c030d6a2dc350f9f8610"
+  };
+  var DOCPATH = ['empresas','fortcom','dados','principal'];
+  var LSPIN = 'fortcom_pin_ok';
+
+  var chip=document.getElementById('fbChip'), txt=document.getElementById('fbTxt');
+  function st(cls,t){ if(!chip) return; chip.className=cls||''; txt.textContent=t; }
+
+  /* ---------- 1. tela de PIN ---------- */
+  var wrap=document.getElementById('pinWrap');
+  try{ if(document.getElementById('pinLogo') && typeof logoSVG==='function')
+        document.getElementById('pinLogo').innerHTML='<div style="width:66px;margin:0 auto">'+logoSVG('#fff')+'</div>';
+  }catch(e){}
+  function entrar(){
+    var v=(document.getElementById('pinInput').value||'').trim();
+    if(v===PIN){ try{sessionStorage.setItem(LSPIN,'1');}catch(e){} wrap.remove(); iniciar(); }
+    else{ document.getElementById('pinErr').textContent='Senha incorreta'; document.getElementById('pinInput').value=''; }
+  }
+  document.getElementById('pinBtn').onclick=entrar;
+  document.getElementById('pinInput').addEventListener('keydown',function(e){ if(e.key==='Enter') entrar(); });
+  var jaEntrou=false; try{ jaEntrou=sessionStorage.getItem(LSPIN)==='1'; }catch(e){}
+  if(jaEntrou){ wrap.remove(); } else { setTimeout(function(){document.getElementById('pinInput').focus();},350); }
+
+  /* ---------- 2. sincronizacao ---------- */
+  var db=null, ref=null, pausar=false, ultimoEnviado='';
+  var DEV = (function(){ try{ var d=localStorage.getItem('fortcom_dev');
+      if(!d){ d=Math.random().toString(36).slice(2,9); localStorage.setItem('fortcom_dev',d);} return d;
+    }catch(e){ return 'x'; } })();
+
+  function pacote(){
+    return JSON.stringify({
+      obras: (typeof obras!=='undefined'?obras:[]),
+      currentObraId: (typeof currentObraId!=='undefined'?currentObraId:null),
+      currentWeekId: (typeof currentWeekId!=='undefined'?currentWeekId:null)
+    });
+  }
+
+  function enviar(){
+    if(!ref||pausar) return;
+    var p;
+    try{ p=pacote(); }catch(e){ return; }
+    if(p===ultimoEnviado) return;
+    ultimoEnviado=p;
+    if(navigator.onLine===false){ st('off','Aguardando internet'); }
+    else st('','Enviando…');
+    clearTimeout(window._fbLento);
+    window._fbLento=setTimeout(function(){
+      if(txt && txt.textContent==='Enviando…') st('off','Aguardando internet');
+    },6000);
+    ref.set({ payload:p, dev:DEV, updatedAt:Date.now() })
+       .then(function(){ clearTimeout(window._fbLento); st('','Sincronizado ✓'); })
+       .catch(function(e){ st('off','Aguardando internet'); console.warn('sync',e); });
+  }
+
+  function aplicar(d){
+    if(!d||!d.payload) return;
+    if(d.dev===DEV) return;                 // eco do proprio aparelho
+    var o; try{ o=JSON.parse(d.payload); }catch(e){ return; }
+    if(!o.obras||!o.obras.length) return;
+    pausar=true;
+    try{
+      obras = o.obras;
+      if(o.currentObraId && obras.some(function(x){return x.id===o.currentObraId;})) currentObraId=o.currentObraId;
+      if(o.currentWeekId) currentWeekId=o.currentWeekId;
+      ultimoEnviado = pacote();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({obras:obras,currentObraId:currentObraId,currentWeekId:currentWeekId,savedAt:new Date().toISOString()}));
+      if(typeof render==='function') render();
+      st('','Atualizado de outro aparelho');
+      setTimeout(function(){ st('','Sincronizado ✓'); },2600);
+    }catch(e){ console.warn(e); }
+    pausar=false;
+  }
+
+  function iniciar(){
+    if(db) return;
+    if(typeof firebase==='undefined'){ st('off','Offline (local)'); return; }
+    try{
+      firebase.initializeApp(CFG);
+      db=firebase.firestore();
+      db.enablePersistence({synchronizeTabs:true}).catch(function(){});
+      ref=db.collection(DOCPATH[0]).doc(DOCPATH[1]).collection(DOCPATH[2]).doc(DOCPATH[3]);
+      st('','Conectando…');
+      ref.onSnapshot({includeMetadataChanges:false},function(snap){
+        if(!snap.exists){ ultimoEnviado=''; enviar(); return; }
+        aplicar(snap.data());
+      },function(e){ st('err','Erro de conexao'); console.warn(e); });
+
+      // empurra sempre que o sistema gravar
+      if(typeof saveNow==='function'){
+        var orig=saveNow;
+        window.saveNow=function(){ orig.apply(this,arguments); clearTimeout(window._fbT);
+          window._fbT=setTimeout(enviar,900); };
+      }
+      setInterval(enviar, 20000);
+      window.addEventListener('online', function(){ st('','Reconectando…'); enviar(); });
+      window.addEventListener('offline',function(){ st('off','Aguardando internet'); });
+      chip.onclick=function(){ ultimoEnviado=''; enviar(); };
+    }catch(e){ st('err','Falha ao iniciar'); console.warn(e); }
+  }
+
+  if(jaEntrou) window.addEventListener('load', iniciar);
+})();
+</script>
+<!-- =================== FIM SINCRONIZACAO FIREBASE =================== -->
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3583903a8b429e4',t:'MTc4ODQ3NDg3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+
 </html>
