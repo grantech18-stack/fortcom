@@ -571,6 +571,11 @@ canvas.canvas-fixo{display:block;width:auto!important;height:auto!important;max-
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
         Restaurar copia
       </a>
+      <a style="position:relative;background:var(--successLight);color:var(--success);font-weight:700">
+        <input type="file" id="importFileTop" accept=".json,.csv,.xlsx,.xls,application/json" style="position:absolute;inset:0;opacity:0;cursor:pointer" onchange="importFile(event)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Importar backup (.json)
+      </a>
       <a id="btnInstalar" onclick="instalarApp()" style="display:none;background:var(--successLight);color:var(--success);font-weight:700">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Instalar aplicativo
@@ -583,9 +588,9 @@ canvas.canvas-fixo{display:block;width:auto!important;height:auto!important;max-
 
     <div class="side-card">
       <h4>Precisa da planilha antiga?</h4>
-      <p>Importe seu arquivo .xlsx/.csv e o dashboard converte automaticamente.</p>
+      <p>Importe seu backup .json ou uma planilha .xlsx/.csv — o dashboard converte automaticamente.</p>
       <label style="position:relative;cursor:pointer;display:inline-block">
-        <input type="file" id="importFile" accept=".csv,.xlsx,.xls" style="position:absolute;inset:0;opacity:0;cursor:pointer" onchange="importFile(event)">
+        <input type="file" id="importFile" accept=".json,.csv,.xlsx,.xls,application/json" style="position:absolute;inset:0;opacity:0;cursor:pointer" onchange="importFile(event)">
         <span style="background:white;color:#6366f1;padding:8px 14px;border-radius:999px;font-weight:700;font-size:12px;display:inline-block">Importar planilha</span>
       </label>
     </div>
@@ -3679,5 +3684,5 @@ function renderDespesasPorObra(){
   window.addEventListener('resize',()=>{renderCharts(); renderFinanceChart(); renderCurvaS();});
 })();
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3580adcb872f94d',t:'MTc4ODQ3Mjk4NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
