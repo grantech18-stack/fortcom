@@ -544,6 +544,13 @@ function importar(w, conteudo, nome) {
     'EMAIL_PADRAO continua vindo de EMPRESA.email');
   ok('8.22 (A1) o contato da empresa segue no relatório (não foi trocado)',
     /email: 'fernandogpi92@gmail\.com'/.test(SRC) && /EMPRESA\.email|_empresa:EMPRESA/.test(SRC));
+  // ---- M7 (parcial): o cache do service worker precisa acompanhar o deploy ----
+  const CACHE_ESPERADO = 'fortcom-v8';   // ← subir junto com cada deploy
+  const cacheNoSw = (SW_SRC.match(/const CACHE='([^']+)'/) || [])[1];
+  ok('8.23 (M7) sw.js bumpou o cache neste deploy (' + CACHE_ESPERADO + ')',
+    cacheNoSw === CACHE_ESPERADO,
+    "sw.js está em '" + cacheNoSw + "' — sem o bump, o celular que já instalou o " +
+    'app continua servindo o index.html antigo do cache');
   ok('8.13 (L8) exportCSV protege campos com aspas/quebra de linha',
     /csvCell|csvEsc|escCSV|function celCSV/.test(SRC),
     'campos continuam sem aspas de campo');

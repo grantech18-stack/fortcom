@@ -1,5 +1,8 @@
 // FORTCOM - Service Worker (modo app instalado)
-const CACHE='fortcom-v7';
+// Bumpar a cada deploy: o 'activate' apaga o cache antigo, sem isso o celular
+// que ja instalou o app continua servindo o index.html velho.
+// (v8 = 04/09/2026: L11/L12 + EMAIL_PADRAO gran.tech18@gmail.com)
+const CACHE='fortcom-v8';
 const ARQUIVOS=[
   './',
   './index.html',
