@@ -295,28 +295,51 @@ function importar(w, conteudo, nome) {
   D.document.getElementById('fPix').value = 'maria@pix.com';
   D.document.getElementById('fExtras').value = '100,25';
   D.document.getElementById('fAdiant').value = '50,10';
-  chamar(D, 'saveFuncionario()');
-  await espera(80);
-  const fD = semanaAtual(D).funcionarios.find(f => f.nome === 'MARIA');
-  ok('4.8 (limite) campo type=number aceita "150,50" digitado',
+  ok('4.8 (L12) os 7 campos de dinheiro aceitam "150,50" digitado',
     D.document.getElementById('fDiaria').value === '150,50',
-    'o campo <input type="number"> sanitiza "150,50" para "' + D.document.getElementById('fDiaria').value +
-    '" — o parseVal nunca vê a vírgula e o app responde "Informe a diária"');
-  chamar(D, "document.getElementById('fDiaria').value='150.50'; document.getElementById('fExtras').value='100.25'; document.getElementById('fAdiant').value='50.10'; saveFuncionario();");
-  await espera(120);
-  const fD2 = semanaAtual(D).funcionarios.find(f => f.nome === 'MARIA');
-  ok('4.9 diária 150.50 grava 150.5', !!fD2 && quase(fD2.diaria, 150.5), fD2 && fD2.diaria);
-  ok('4.10 extras 100.25 e adiantamento 50.10 gravam certo',
-    !!fD2 && quase(fD2.extras, 100.25) && quase(fD2.adiantamento, 50.1),
-    fD2 && (fD2.extras + ' / ' + fD2.adiantamento));
+    'o campo devolveu "' + D.document.getElementById('fDiaria').value +
+    '" — com <input type="number"> o parseVal nunca vê a vírgula e o app responde "Informe a diária"');
+  chamar(D, 'saveFuncionario()');
+  await espera(150);
+  const fD = semanaAtual(D).funcionarios.find(f => f.nome === 'MARIA');
+  ok('4.9 diária "150,50" grava 150.5', !!fD && quase(fD.diaria, 150.5), fD && fD.diaria);
+  ok('4.10 extras "100,25" e adiantamento "50,10" gravam certo',
+    !!fD && quase(fD.extras, 100.25) && quase(fD.adiantamento, 50.1),
+    fD && (fD.extras + ' / ' + fD.adiantamento));
   ok('4.11 total = 5 dias*150.5 + 100.25 - 50.1',
-    !!fD2 && quase(chamar(D, 'totalFunc(obras[0].semanas.find(function(w){return w.id===currentWeekId;}).funcionarios.find(function(f){return f.nome==="MARIA";}))'), 5 * 150.5 + 100.25 - 50.1));
-  // fluxo real: pagamento recebido em BR
-  const E = await abrirApp({ promptRespostas: ['2.500,75'] });
-  await entrarPIN(E, '2604');
-  chamar(E, 'editPagamento(currentWeekId)');
-  await espera(80);
-  ok('4.12 pagamento "2.500,75" grava 2500.75', quase(semanaAtual(E).valorRecebido, 2500.75), semanaAtual(E).valorRecebido);
+    !!fD && quase(chamar(D, 'totalFunc(obras[0].semanas.find(function(w){return w.id===currentWeekId;}).funcionarios.find(function(f){return f.nome==="MARIA";}))'), 5 * 150.5 + 100.25 - 50.1));
+  // L12 nos outros campos de dinheiro: valor recebido, etapa, despesa e valor da obra
+  const D2 = await abrirApp({});
+  await entrarPIN(D2, '2604');
+  chamar(D2, 'openWeekModal(currentWeekId)');
+  D2.document.getElementById('wRecebido').value = '2.500,75';
+  chamar(D2, 'saveWeek()');
+  await espera(150);
+  ok('4.13 (L12) "Valor recebido" 2.500,75 grava 2500.75',
+    quase(semanaAtual(D2).valorRecebido, 2500.75), semanaAtual(D2).valorRecebido);
+  chamar(D2, 'openEtapaModal(null)');
+  D2.document.getElementById('eNome').value = 'ALVENARIA';
+  D2.document.getElementById('eOrcado').value = '12.345,67';
+  chamar(D2, 'saveEtapa()');
+  await espera(150);
+  ok('4.14 (L12) "Valor orçado" da etapa 12.345,67 grava 12345.67',
+    quase(chamar(D2, 'obras.find(function(o){return o.id===currentObraId;}).etapas[0].orcado'), 12345.67),
+    chamar(D2, 'obras.find(function(o){return o.id===currentObraId;}).etapas[0].orcado'));
+  chamar(D2, 'openDespesaModal(null)');
+  D2.document.getElementById('pDescricao').value = 'CIMENTO';
+  D2.document.getElementById('pValor').value = '1.099,90';
+  chamar(D2, 'saveDespesa()');
+  await espera(150);
+  ok('4.15 (L12) despesa 1.099,90 grava 1099.9',
+    quase(chamar(D2, 'obras.find(function(o){return o.id===currentObraId;}).despesas[0].valor'), 1099.9),
+    chamar(D2, 'obras.find(function(o){return o.id===currentObraId;}).despesas[0].valor'));
+  chamar(D2, 'openObraModal()');
+  D2.document.getElementById('oValor').value = '85.000,00';
+  chamar(D2, 'saveObra()');
+  await espera(150);
+  ok('4.16 (L12) "Valor da obra" 85.000,00 grava 85000',
+    quase(estado(D2).obras[0].valorTotal, 85000), estado(D2).obras[0].valorTotal);
+  ok('4.17 nenhum erro de JS nos fluxos de valor', errosReais(D2).length === 0, resumo(errosReais(D2)));
 
   /* ---------- 5. M2 — import de backup ---------- */
   grupo('5. (M2) Import de backup (legado e v4)');
@@ -484,6 +507,16 @@ function importar(w, conteudo, nome) {
   ok('8.12 (L4) openWeekModal tolera obra com 0 semanas',
     !/const last=weeks\[weeks\.length-1\];\s*\n\s*const d=new Date\(last\.fim\)/.test(SRC),
     'new Date(last.fim) com last undefined');
+  const camposDinheiro = ['eOrcado', 'pValor', 'fDiaria', 'fExtras', 'fAdiant', 'wRecebido', 'oValor'];
+  const aindaNumber = camposDinheiro.filter(id =>
+    new RegExp('id="' + id + '"[^>]*type="number"').test(SRC));
+  ok('8.14 (L12) nenhum campo de dinheiro é type="number"', aindaNumber.length === 0,
+    'ainda type=number: ' + aindaNumber.join(', '));
+  ok('8.15 (L12) campos de dinheiro usam inputmode="decimal" (teclado numérico no celular)',
+    camposDinheiro.every(id => new RegExp('id="' + id + '"[^>]*inputmode="decimal"').test(SRC)));
+  ok('8.16 (L11) focus() do PIN tem guarda de elemento nulo',
+    /setTimeout\(function\(\)\{\s*var _pin=document\.getElementById\('pinInput'\);\s*if\(_pin\) _pin\.focus\(\);/.test(SRC),
+    'o timer ainda chama .focus() sem checar se a tela existe');
   ok('8.13 (L8) exportCSV protege campos com aspas/quebra de linha',
     /csvCell|csvEsc|escCSV|function celCSV/.test(SRC),
     'campos continuam sem aspas de campo');

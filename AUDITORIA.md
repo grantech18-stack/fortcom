@@ -6,7 +6,7 @@
 
 **Status (03/09/2026):** correções rápidas **M1, M2, M3, L1, L3 e M8 aplicadas** + **lado do app do A1 pronto** (login de nuvem com Firebase Auth — falta publicar as rules no console). Restam os itens Alto (A2–A4, A1 pendente só do console) e os demais Médio/Baixo (M4–M7, L2, L4–L10).
 
-**Re-verificação (04/09/2026):** as correções de 03/09 foram **re-executadas e confirmadas** por uma suíte automatizada que agora vive no repositório (`testes/suite.js`, jsdom, 72 verificações — **55 ok / 17 falhando**, todas as falhas mapeadas para itens abertos desta auditoria). Ver [Verificação automatizada](#verificação-automatizada-04092026). Foram encontrados **2 achados novos** (L11 e L12) e **1 nuance do M3** que limita o alcance da correção. O número de linhas do alvo subiu para **3.981** (`index.html`) + 32 (`sw.js`).
+**Re-verificação (04/09/2026):** as correções de 03/09 foram **re-executadas e confirmadas** por uma suíte automatizada que agora vive no repositório (`testes/suite.js`, jsdom). Na primeira rodada: 72 verificações, 55 ok, 17 falhando, todas as falhas mapeadas para itens abertos. Foram encontrados **2 achados novos** (L11 e L12) e **1 nuance do M3** que limitava o alcance da correção. **L11 e L12 foram corrigidos na sequência** e a suíte ampliada para **79 verificações — 64 ok / 15 falhando** (restam A2, A3, A4, M4, M5, M6, M7, L2, L4, L5, L8). Ver [Verificação automatizada](#verificação-automatizada-04092026). O alvo passou a **3.983 linhas** (`index.html`) + 32 (`sw.js`).
 
 ## Resumo executivo
 
@@ -107,8 +107,8 @@ O payload sincroniza **tudo** (obras, etapas, diário, despesas). Quando o estad
 | L8 | `exportCSV`: sem aspas de campo (quebra com `"` ou quebra de linha) e decimal com `.` em Excel BR | L2632 |
 | L9 | `gerarRelatorioPDF` usa `document.write` + popup (bloqueador comum); o HTML do relatório também não escapa dados (ver A4) | L3266+ |
 | L10 | Arquivo único de 376 KB no repo: diff/merge impossíveis de revisar, cache HTTP ineficiente; considerar `index.html` + `app.js` + `estilo.css` + `manifest.json` + ícones | — |
-| L11 | **Novo (04/09):** `setTimeout(…,350)` chama `pinInput.focus()` depois que a tela de PIN foi removida → `TypeError` em toda abertura em que o PIN é digitado rápido | L3896 |
-| L12 | **Novo (04/09):** `<input type="number">` devolve `""` para `150,50` → o usuário não consegue digitar formato BR em diária/extras/adiantamento/valor recebido (anula o M3 nesses 4 campos) | L1355, 1363, 1367, 1419 |
+| L11 | ~~**Novo (04/09):** `setTimeout(…,350)` chamava `pinInput.focus()` depois que a tela de PIN foi removida → `TypeError` em toda abertura em que o PIN é digitado rápido~~ ✅ **corrigido em 04/09/2026** (guarda `if(_pin)`; teste 1.9) | L3896 |
+| L12 | ~~**Novo (04/09):** `<input type="number">` devolve `""` para `150,50` → o usuário não conseguia digitar formato BR nos campos de dinheiro (anulava o M3)~~ ✅ **corrigido em 04/09/2026** (`type="text" inputmode="decimal"` nos 7 campos; testes 4.8–4.17, 8.14–8.16) | L1208, 1301, 1355, 1363, 1367, 1419, 1449 |
 
 ---
 
@@ -130,7 +130,8 @@ executa os fluxos do app de verdade: boot, PIN, login de nuvem, sync entre 2 apa
 em formato BR e injeção de HTML. O estado do app vive em `let` no escopo léxico do
 `<script>` (não em `window`), então a suíte lê/escreve por `window.eval()`.
 
-**Resultado em 04/09/2026 — 72 verificações, 55 ok, 17 falhando.**
+**Resultado em 04/09/2026 — 79 verificações, 64 ok, 15 falhando**
+(1ª rodada do dia: 72 / 55 ok / 17 falhando → L11 e L12 corrigidos, +7 verificações novas).
 
 ### Confirmado como corrigido (executado, não lido no texto)
 
@@ -139,6 +140,8 @@ em formato BR e injeção de HTML. O estado do app vive em `let` no escopo léxi
 | M1 | `removeWeek()` → recarrega o app com o localStorage gravado | semana **não** ressuscita (3.1–3.4 ok) |
 | M2 | import de `{obra, weeks}` sem `status`/`dias` e import v4 com fotos | abre sem erro, sanitiza, persiste (5.1–5.11 ok) |
 | M3 | `parseVal` + fluxo real de custo extra e pagamento com `1.234,56` / `2.500,75` | grava 1234.56 / 2500.75 (4.1–4.7, 4.12 ok) |
+| **L11** | entrar com o PIN em menos de 350 ms e esperar o timer disparar | nenhum `TypeError` no console (1.9 ok) |
+| **L12** | digitar `150,50` / `2.500,75` / `12.345,67` / `1.099,90` / `85.000,00` nos campos de diária, extras, adiantamento, valor recebido, etapa, despesa e valor da obra | todos gravam o valor certo (4.8–4.17 ok) |
 | L1 | busca de ano hardcoded no nome do mês | nada (8.4 ok) |
 | L3 | 1º acesso sem semana salva | abre na semana que cobre hoje (1.8 ok) |
 | M8 | busca de `beacon.min.js` e `/cdn-cgi` | removidos; `</html>` intacto (8.1–8.3 ok) |
@@ -160,36 +163,44 @@ em formato BR e injeção de HTML. O estado do app vive em `let` no escopo léxi
 | 10 | **L4** | `openWeekModal` (L2330): `new Date(last.fim)` com `last` undefined (8.12) |
 | 11 | **L8** | `exportCSV` (L2678) sem aspas de campo (8.13) |
 
+Nenhuma das 15 reprovações restantes é regressão: são exatamente os itens abertos A2, A3,
+A4, M4, M5, M6, M7, L2, L4, L5 e L8.
+
 > **A1 (regras do Firestore) continua não verificável daqui**: o que a suíte prova é o
 > lado do app (login exigido antes de `firebase.initializeApp`). As *security rules* de
 > `fortcom-c8f39` só se confirmam no console.
 
 ### Achados novos desta rodada
 
-#### L11 — `TypeError` no timer de foco da tela de PIN (novo) — **CONFIRMADO**
+#### L11 — `TypeError` no timer de foco da tela de PIN (novo) — ✅ **CORRIGIDO em 04/09/2026**
 `index.html` L3896: `else { setTimeout(function(){ document.getElementById('pinInput').focus(); },350); }`
 O timer é armado **sempre** que a aba abre sem sessão de PIN, mas a tela é removida
 (`wrap.remove()`) assim que o PIN é aceito. Quem digita os 4 dígitos em menos de 350 ms —
 o dono, que faz isso todo dia — recebe `Uncaught TypeError: Cannot read properties of
 null (reading 'focus')` no console. Não derruba o app (o `init` já rodou), mas é erro em
 toda abertura rápida e suja o rastreamento de erros.
-**Correção:** `var el=document.getElementById('pinInput'); if(el) el.focus();`
-**Evidência:** verificação 1.9 da suíte (reprovada).
+**Correção aplicada:** `var _pin=document.getElementById('pinInput'); if(_pin) _pin.focus();`
+**Evidência:** verificação 1.9 da suíte — reprovada antes, **passando depois**.
 
-#### L12 — `<input type="number">` anula o M3 nos campos de valor (novo) — **CONFIRMADO**
+#### L12 — `<input type="number">` anulava o M3 nos campos de valor (novo) — ✅ **CORRIGIDO em 04/09/2026**
 `index.html` L1355 (`fDiaria`), L1363 (`fExtras`), L1367 (`fAdiant`), L1419 (`wRecebido`):
 `<input type="number">`. Pela especificação HTML, um `type=number` com conteúdo inválido
 devolve **string vazia** em `.value` — e `150,50` é inválido (a vírgula só é aceita como
 separador decimal em `type=number` quando o *idioma do documento* usa vírgula **e** o
 navegador decide aplicar `sanitize`). Na prática, digitando `150,50` o campo entrega `""`,
 o `parseVal` nunca vê a vírgula e o app responde **"Informe a diária"**.
-Ou seja: o **M3 está correto no código**, mas nesses 4 campos o usuário não consegue nem
-digitar o formato BR. Nos campos que são `prompt()` (custo extra, pagamento) o M3 funciona
-de fato — e é isso que a suíte prova em 4.7 e 4.12.
-**Correção:** trocar `type="number"` por `type="text" inputmode="decimal"` nos 4 campos
-(mantém o teclado numérico no celular e deixa o `parseVal` trabalhar), ou aplicar
-`valueAsNumber`/normalização no `input`.
-**Evidência:** verificação 4.8 da suíte (reprovada — o campo devolve `""`).
+Ou seja: o **M3 estava correto no código**, mas nesses campos o usuário não conseguia nem
+digitar o formato BR — o app respondia "Informe a diária" para `150,50`. O levantamento
+completo achou **7** campos de dinheiro nessa situação (os 4 acima + `eOrcado` L1208,
+`pValor` L1301 e `oValor` L1449). Onde a entrada é `prompt()` (custo extra, pagamento) o
+M3 sempre funcionou de fato — e é isso que a suíte prova em 4.7 e 4.12.
+**Correção aplicada:** `type="text" inputmode="decimal"` nos **7** campos de dinheiro
+(`eOrcado`, `pValor`, `fDiaria`, `fExtras`, `fAdiant`, `wRecebido`, `oValor`) — o
+`inputmode` mantém o teclado numérico no celular e o `parseVal` volta a receber a vírgula.
+Os 3 campos de contagem (`eAvanco` %, `dEfetivo` pessoas, `wNumero` nº da semana) seguem
+`type="number"`. O CSS não muda: os estilos são `.field input`, não `input[type=number]`.
+**Evidência:** verificações 4.8–4.17 e 8.14–8.16 da suíte — 4.8 reprovava antes (o campo
+devolvia `""`), agora o valor BR chega inteiro nos 7 campos.
 
 ---
 
@@ -207,10 +218,10 @@ de fato — e é isso que a suíte prova em 4.7 e 4.12.
 
 1. **Hoje, fora do código:** revisar as *security rules* do Firestore de `fortcom-c8f39` (A1) e ter um backup `.json` + Drive atualizados.
 2. **Rápido e barato:** M1 (excluir semana), M2 (sanitizar import), M3 (`parseVal`), L1 (ano), L3 (semana inicial), M8 (remover Cloudflare) — ✅ **feito em 03/09/2026** e **re-confirmado por execução em 04/09/2026**.
-3. **Barato e novo (04/09):** L11 (guarda no `focus()` do PIN — 1 linha) e L12 (`type="number"` → `type="text" inputmode="decimal"` nos 4 campos de valor, sem o que o M3 não chega ao usuário).
+3. **Barato e novo (04/09):** L11 (guarda no `focus()` do PIN) e L12 (`type="number"` → `type="text" inputmode="decimal"` nos 7 campos de valor, sem o que o M3 não chegava ao usuário) — ✅ **feito em 04/09/2026**, suíte 64/79.
 4. **Estrutura:** A4 (escape + `esc()` em tudo), A2 (troca de PIN + resgate), M4 (save só em mudança + aviso de backup pendente), M6 (compressão de fotos), M7 (SW com teto).
 5. **Projeto:** A3 (versão/conflicto na sync) + M5 (docs por obra) — é o passo que transforma a "nuvem" em sincronização de verdade (junto com A1).
 
-> Cada item concluído deve manter `cd testes && npm test` sem novas falhas: as 55
-> verificações que passam hoje são a régua de regressão (dados do usuário nunca podem
+> Cada item concluído deve manter `cd testes && npm test` sem novas falhas: as **64
+> verificações que passam hoje** são a régua de regressão (dados do usuário nunca podem
 > sumir).

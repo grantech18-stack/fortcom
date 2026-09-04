@@ -1205,7 +1205,7 @@ canvas.canvas-fixo{display:block;width:auto!important;height:auto!important;max-
             <option>Esquadrias</option><option>Louças e metais</option><option>Limpeza final</option>
           </datalist>
         </div>
-        <div class="field"><label>Valor orçado (R$) *</label><input id="eOrcado" type="number" step="0.01" placeholder="Ex: 12000"></div>
+        <div class="field"><label>Valor orçado (R$) *</label><input id="eOrcado" type="text" inputmode="decimal" placeholder="Ex: 12.000,00"></div>
         <div class="field"><label>Avanço físico (%)</label><input id="eAvanco" type="number" min="0" max="100" step="1" placeholder="0"></div>
         <div class="field"><label>Início previsto</label><input id="eInicio" type="date"></div>
         <div class="field"><label>Fim previsto</label><input id="eFim" type="date"></div>
@@ -1298,7 +1298,7 @@ canvas.canvas-fixo{display:block;width:auto!important;height:auto!important;max-
             <option>Alimentação</option><option>EPI</option><option>Taxas / Documentos</option><option>Outros</option>
           </select>
         </div>
-        <div class="field"><label>Valor (R$) *</label><input id="pValor" type="number" step="0.01" placeholder="0,00"></div>
+        <div class="field"><label>Valor (R$) *</label><input id="pValor" type="text" inputmode="decimal" placeholder="0,00"></div>
         <div class="field"><label>Fornecedor</label><input id="pFornecedor" placeholder="Ex: Depósito Central"></div>
         <div class="field"><label>Nº da Nota / NF</label><input id="pNota" placeholder="Opcional"></div>
         <div class="field"><label>Data da compra</label><input id="pData" type="date"></div>
@@ -1352,7 +1352,7 @@ canvas.canvas-fixo{display:block;width:auto!important;height:auto!important;max-
         </div>
         <div class="field">
           <label>Valor da diária (R$)</label>
-          <input id="fDiaria" type="number" step="0.01" placeholder="150,00">
+          <input id="fDiaria" type="text" inputmode="decimal" placeholder="150,00">
         </div>
         <div class="field" style="grid-column:span 2">
           <label>PIX do funcionário <span style="text-transform:none;font-weight:500;color:var(--muted);letter-spacing:0">(chave pix - CPF, telefone, e-mail ou aleatória)</span></label>
@@ -1360,11 +1360,11 @@ canvas.canvas-fixo{display:block;width:auto!important;height:auto!important;max-
         </div>
         <div class="field">
           <label>Horas extras (R$)</label>
-          <input id="fExtras" type="number" step="0.01" placeholder="0,00" value="0">
+          <input id="fExtras" type="text" inputmode="decimal" placeholder="0,00" value="0">
         </div>
         <div class="field">
           <label>Adiantamento (R$)</label>
-          <input id="fAdiant" type="number" step="0.01" placeholder="0,00" value="0">
+          <input id="fAdiant" type="text" inputmode="decimal" placeholder="0,00" value="0">
         </div>
       </div>
       <div class="field">
@@ -1416,7 +1416,7 @@ canvas.canvas-fixo{display:block;width:auto!important;height:auto!important;max-
         </div>
         <div class="field" style="grid-column:span 2">
           <label>💰 Valor recebido da obra nesta semana (R$)</label>
-          <input id="wRecebido" type="number" step="0.01" placeholder="Ex: 5000">
+          <input id="wRecebido" type="text" inputmode="decimal" placeholder="Ex: 5.000,00">
           <small style="color:var(--muted);font-size:11px">Quanto o cliente te pagou nessa semana. O gasto com mão de obra já calcula automático da ficha.</small>
         </div>
       </div>
@@ -1446,7 +1446,7 @@ canvas.canvas-fixo{display:block;width:auto!important;height:auto!important;max-
         </div>
         <div class="field">
           <label>Valor total que você pegou a obra (R$) *</label>
-          <input id="oValor" type="number" step="0.01" placeholder="Ex: 85000">
+          <input id="oValor" type="text" inputmode="decimal" placeholder="Ex: 85.000,00">
         </div>
         <div class="field">
           <label>Cliente / Contratante</label>
@@ -3893,7 +3893,8 @@ function renderDespesasPorObra(){
   }
   var jaEntrou=false; try{ jaEntrou=sessionStorage.getItem(LSPIN)==='1'; }catch(e){}
   if(jaEntrou){ wrap.remove(); window.addEventListener('load', depoisDoPin); }
-  else { setTimeout(function(){ document.getElementById('pinInput').focus(); },350); }
+  else { setTimeout(function(){ var _pin=document.getElementById('pinInput');
+    if(_pin) _pin.focus(); /* a tela ja foi removida se o PIN entrou em < 350 ms (L11) */ },350); }
 
   /* ---------- 2. sincronizacao ---------- */
   var db=null, ref=null, pausar=false, ultimoEnviado='';
