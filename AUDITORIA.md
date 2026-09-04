@@ -6,7 +6,7 @@
 
 **Status (03/09/2026):** correções rápidas **M1, M2, M3, L1, L3 e M8 aplicadas** + **lado do app do A1 pronto** (login de nuvem com Firebase Auth — falta publicar as rules no console). Restam os itens Alto (A2–A4, A1 pendente só do console) e os demais Médio/Baixo (M4–M7, L2, L4–L10).
 
-**Re-verificação (04/09/2026):** as correções de 03/09 foram **re-executadas e confirmadas** por uma suíte automatizada que agora vive no repositório (`testes/suite.js`, jsdom). Na primeira rodada: 72 verificações, 55 ok, 17 falhando, todas as falhas mapeadas para itens abertos. Foram encontrados **2 achados novos** (L11 e L12) e **1 nuance do M3** que limitava o alcance da correção. **L11 e L12 foram corrigidos na sequência**, o texto das *rules* foi versionado (`firestore.rules` + `firebase.json` + `FIREBASE.md`) e a suíte ampliada para **86 verificações — 71 ok / 15 falhando** (restam A2, A3, A4, M4, M5, M6, M7, L2, L4, L5, L8). Ver [Verificação automatizada](#verificação-automatizada-04092026). O alvo passou a **3.983 linhas** (`index.html`) + 32 (`sw.js`).
+**Re-verificação (04/09/2026):** as correções de 03/09 foram **re-executadas e confirmadas** por uma suíte automatizada que agora vive no repositório (`testes/suite.js`, jsdom). Na primeira rodada: 72 verificações, 55 ok, 17 falhando, todas as falhas mapeadas para itens abertos. Foram encontrados **2 achados novos** (L11 e L12) e **1 nuance do M3** que limitava o alcance da correção. **L11 e L12 foram corrigidos na sequência**, o texto das *rules* foi versionado (`firestore.rules` + `firebase.json` + `FIREBASE.md`) e a suíte ampliada para **87 verificações — 72 ok / 15 falhando** (restam A2, A3, A4, M4, M5, M6, M7, L2, L4, L5, L8). Ver [Verificação automatizada](#verificação-automatizada-04092026). O alvo passou a **3.983 linhas** (`index.html`) + 32 (`sw.js`).
 
 ## Resumo executivo
 
@@ -157,7 +157,7 @@ em formato BR e injeção de HTML. O estado do app vive em `let` no escopo léxi
 | 4 | **M5** | nenhuma referência a `payload.length` — o estouro de 1 MB continua silencioso (7.11) |
 | 5 | **M4** | `setInterval(…, 30000)` chama `saveNow()` sem comparar com o último pacote gravado (8.7) |
 | 6 | **M6** | `handleFotos` (L2741) grava o `readAsDataURL` cru — nenhum `drawImage`/`toDataURL` no fonte (8.8) |
-| 7 | **M7** | `sw.js` L28: `c.put` de qualquer GET, sem teto de entradas nem LRU (8.9) |
+| 7 | **M7** | `sw.js` L30: `c.put` de qualquer GET, sem teto de entradas nem LRU (8.9). **Parcialmente atendido em 04/09:** `CACHE` bumpado para `fortcom-v8` (o `activate` apaga o cache antigo, sem isso o celular não pega o `index.html` novo) e a verificação 8.23 passa a exigir o bump a cada deploy |
 | 8 | **L2** | `obrasModelo`, `LOGO_BRANCA` e `OBRA_KEY` seguem no arquivo (8.10) |
 | 9 | **L5** | `selectWeek` (L2195) chama `weeks.find(…).numero` sem validar (8.11) |
 | 10 | **L4** | `openWeekModal` (L2330): `new Date(last.fim)` com `last` undefined (8.12) |
