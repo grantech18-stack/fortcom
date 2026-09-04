@@ -1,10 +1,11 @@
 // FORTCOM - Service Worker (modo app instalado)
-const CACHE='fortcom-v6';
+const CACHE='fortcom-v7';
 const ARQUIVOS=[
   './',
   './index.html',
   'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
-  'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js'
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js',
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js'
 ];
 
 self.addEventListener('install', e=>{
