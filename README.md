@@ -22,6 +22,13 @@ Depois disso funciona como app, inclusive offline no canteiro.
 O sistema abre vazio. Para carregar seus dados:
 **Importar planilha** na barra lateral → selecione seu arquivo de backup `.json`
 
+## Nuvem (sincronização entre aparelhos)
+
+Opcional. O sistema funciona 100% offline; a nuvem só sincroniza entre aparelhos.
+A configuração do Firebase (login e *security rules*) está em
+**[FIREBASE.md](FIREBASE.md)** — as regras ficam versionadas em
+[`firestore.rules`](firestore.rules) e precisam ser **publicadas no console**.
+
 ## Backup
 
 - **Backup agora** — baixa um `.json` com tudo

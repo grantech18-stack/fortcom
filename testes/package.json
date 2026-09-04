@@ -1,0 +1,12 @@
+{
+  "name": "fortcom-testes",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Suite de verificacao automatizada do app FORTCOM (jsdom)",
+  "scripts": {
+    "test": "node suite.js"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

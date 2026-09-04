@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// ============================================================================
+// FORTCOM — Regras de segurança do Firestore (projeto fortcom-c8f39)
+// ----------------------------------------------------------------------------
+// O app inteiro vive em UM documento:
+//   empresas/fortcom/dados/principal     (index.html: DOCPATH)
+// com { payload, dev, updatedAt }.
+//
+// COMO PUBLICAR (o app NÃO lê este arquivo — ele só fica versionado):
+//   Firebase Console → Firestore Database → Rules → colar este conteúdo → Publish
+//   ou, com o Firebase CLI logado:  firebase deploy --only firestore:rules
+//
+// ANTES disso, em Authentication → Sign-in method → habilite "E-mail/senha"
+// e crie o usuário do dono. Sem usuário criado, ninguém entra na nuvem e o app
+// continua funcionando só-offline (os dados locais não são afetados).
+//
+// ⚠️ Publique as regras e a versão nova do app juntas. Versão antiga do app +
+//    regras novas = aquela instalação perde a sincronização (dados locais
+//    intactos) até ser atualizada.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // E-mail do DONO da conta Firebase: gran.tech18@gmail.com
+    // Não confundir com o contato da empresa (EMPRESA.email =
+    // fernandogpi92@gmail.com, que só vai no cabeçalho do relatório/PDF).
+    // Para liberar outro aparelho com outra conta, acrescente o e-mail aqui.
+    function dono() {
+      return request.auth != null
+        && request.auth.token.email in [
+          'gran.tech18@gmail.com'
+        ];
+    }
+
+    // Caminho único usado pelo app (index.html: DOCPATH).
+    // Substitui a regra atual do projeto, que é:
+    //     match /empresas/fortcom/dados/{doc} { allow read, write: if true; }
+    // ou seja: hoje QUALQUER pessoa na internet lê as chaves PIX dos
+    // funcionários e pode sobrescrever ou apagar tudo (item A1 da auditoria).
+    match /empresas/fortcom/dados/{doc} {
+      allow read, write: if dono();
+    }
+
+    // Nada mais é lido ou escrito: todo o resto fica negado.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
