@@ -23,12 +23,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // E-mail do dono. Para liberar mais de um aparelho com contas diferentes,
-    // acrescente os e-mails na lista.
+    // E-mail do DONO da conta Firebase: gran.tech18@gmail.com
+    // Não confundir com o contato da empresa (EMPRESA.email =
+    // fernandogpi92@gmail.com, que só vai no cabeçalho do relatório/PDF).
+    // Para liberar outro aparelho com outra conta, acrescente o e-mail aqui.
     function dono() {
       return request.auth != null
         && request.auth.token.email in [
-          'fernandogpi92@gmail.com'
+          'gran.tech18@gmail.com'
         ];
     }
 

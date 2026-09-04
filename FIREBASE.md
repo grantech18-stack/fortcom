@@ -20,8 +20,17 @@ documento dentro do limite de 1 MB.
 ### 1. Authentication → Sign-in method
 
 Habilite **E-mail/senha** e crie o usuário do dono em *Authentication → Users →
-Add user*. O app já pré-preenche o e-mail de `EMPRESA.email`
-(`fernandogpi92@gmail.com`); use esse ou troque os dois juntos.
+Add user*:
+
+| | |
+|---|---|
+| **E-mail (login da nuvem)** | `gran.tech18@gmail.com` — o dono da conta Firebase |
+| **Não confundir com** | `fernandogpi92@gmail.com` (`EMPRESA.email`), que é o contato da empresa e vai no cabeçalho do relatório/PDF |
+
+O campo de e-mail da tela "Nuvem FORTCOM" já abre preenchido com
+`gran.tech18@gmail.com` (`index.html` → `EMAIL_PADRAO`). Se um dia trocar a
+conta no Firebase, troque **os dois lugares**: o `EMAIL_PADRAO` no `index.html`
+e a lista dentro de `dono()` em `firestore.rules`.
 
 ### 2. Firestore Database → Rules
 

@@ -3840,7 +3840,10 @@ function renderDespesasPorObra(){
       authSenha=document.getElementById('authSenha'),
       authBtn=document.getElementById('authBtn'),
       authErr=document.getElementById('authErr'),
-      EMAIL_PADRAO=(typeof EMPRESA!=='undefined'&&EMPRESA&&EMPRESA.email)||'';
+      // conta do DONO no Firebase (a mesma listada em firestore.rules).
+      // Nao usar EMPRESA.email: aquele e o contato da empresa, que vai no
+      // cabecalho do relatorio/PDF — nao e conta de login da nuvem.
+      EMAIL_PADRAO='gran.tech18@gmail.com';
   function authOK(){ try{ return !!(typeof firebase!=='undefined'&&firebase.auth&&firebase.auth().currentUser); }catch(e){ return false; } }
   function mostrarAuth(){
     if(!authWrap) return;

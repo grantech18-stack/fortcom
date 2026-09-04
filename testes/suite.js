@@ -418,6 +418,9 @@ function importar(w, conteudo, nome) {
   await espera(80);
   ok('7.1 overlay "Nuvem FORTCOM" aparece após o PIN',
     !K.document.getElementById('authWrap').classList.contains('hidden'));
+  ok('7.1b o e-mail já vem preenchido com a conta do dono (gran.tech18@gmail.com)',
+    K.document.getElementById('authEmail').value === 'gran.tech18@gmail.com',
+    'campo veio com "' + K.document.getElementById('authEmail').value + '"');
   K.document.getElementById('authEmail').value = 'dono@fortcom.com.br';
   K.document.getElementById('authSenha').value = 'errada';
   K.document.getElementById('authBtn').click();
@@ -517,6 +520,30 @@ function importar(w, conteudo, nome) {
   ok('8.16 (L11) focus() do PIN tem guarda de elemento nulo',
     /setTimeout\(function\(\)\{\s*var _pin=document\.getElementById\('pinInput'\);\s*if\(_pin\) _pin\.focus\(\);/.test(SRC),
     'o timer ainda chama .focus() sem checar se a tela existe');
+  // ---- A1: as regras versionadas têm que bater com o que o app faz ----
+  const RULES_PATH = path.join(__dirname, '..', 'firestore.rules');
+  const temRules = fs.existsSync(RULES_PATH);
+  const RULES = temRules ? fs.readFileSync(RULES_PATH, 'utf8') : '';
+  const docPathApp = (SRC.match(/var DOCPATH = \[([^\]]+)\]/) || [])[1] || '';
+  const caminhoApp = docPathApp.split(',').map(x => x.trim().replace(/'/g, '')).join('/');
+  ok('8.17 (A1) firestore.rules está versionado no repo', temRules, 'arquivo firestore.rules ausente');
+  ok('8.18 (A1) as regras cobrem exatamente o documento que o app usa',
+    temRules && caminhoApp === 'empresas/fortcom/dados/principal' &&
+    RULES.indexOf('match /empresas/fortcom/dados/{doc}') > -1,
+    'app usa "' + caminhoApp + '"');
+  const soComentarios = RULES.split('\n').filter(l => l.trim().indexOf('//') !== 0).join('\n');
+  ok('8.19 (A1) as regras não são mais "if true" (e negam todo o resto)',
+    temRules && soComentarios.indexOf('if true') === -1 &&
+    /allow read, write: if dono\(\)/.test(soComentarios) &&
+    /match \/\{document=\*\*\} \{[\s\S]{0,60}if false;/.test(soComentarios),
+    'regras efetivas: ' + JSON.stringify(soComentarios.replace(/\s+/g, ' ').slice(0, 160)));
+  ok('8.20 (A1) dono nas regras = conta do Firebase gran.tech18@gmail.com',
+    /'gran\.tech18@gmail\.com'/.test(RULES), 'e-mail do dono ausente/nas regras');
+  ok('8.21 (A1) o login pré-preenche a conta do dono (não o contato da empresa)',
+    /EMAIL_PADRAO='gran\.tech18@gmail\.com'/.test(SRC.replace(/\s+/g, '')),
+    'EMAIL_PADRAO continua vindo de EMPRESA.email');
+  ok('8.22 (A1) o contato da empresa segue no relatório (não foi trocado)',
+    /email: 'fernandogpi92@gmail\.com'/.test(SRC) && /EMPRESA\.email|_empresa:EMPRESA/.test(SRC));
   ok('8.13 (L8) exportCSV protege campos com aspas/quebra de linha',
     /csvCell|csvEsc|escCSV|function celCSV/.test(SRC),
     'campos continuam sem aspas de campo');
