@@ -5,7 +5,9 @@ rules_version = '2';
 // ----------------------------------------------------------------------------
 // O app inteiro vive em UM documento:
 //   empresas/fortcom/dados/principal     (index.html: DOCPATH)
-// com { payload, dev, updatedAt }.
+// com { payload, dev, aba, updatedAt, rev, conflitos } — `rev` e `conflitos`
+// entraram em 04/09/2026 com o merge de sincronização (item A3); as regras
+// não mudam por causa deles (o documento continua sendo só do dono).
 //
 // COMO PUBLICAR (o app NÃO lê este arquivo — ele só fica versionado):
 //   Firebase Console → Firestore Database → Rules → colar este conteúdo → Publish
