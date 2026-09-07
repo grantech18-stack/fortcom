@@ -31,8 +31,29 @@ A configuração do Firebase (login e *security rules*) está em
 
 ## Backup
 
-- **Backup agora** — baixa um `.json` com tudo
-- **Backup automático** — salva um arquivo por dia
-- **Restaurar cópia** — volta uma das cópias dos últimos 7 dias
+- **Backup agora** — baixa um `.json` com tudo (inclusive o código de resgate do PIN)
+- **Lembrete de backup** — uma vez por dia o app avisa que o backup de hoje está
+  pendente (o selo *hoje pendente* aparece ao lado de "Backup agora"); o
+  download só acontece com o seu toque, porque o celular bloqueia downloads
+  automáticos
+- **Restaurar cópia** — volta uma das cópias internas dos últimos 7 dias
 
 Guarde os backups no Google Drive.
+
+## PIN de acesso
+
+O app abre com um PIN. Na primeira vez vale o PIN de fábrica (o de sempre) e a
+tela avisa para trocar: **Ferramentas → Trocar PIN de acesso**. Ao trocar, o app
+mostra um **código de resgate** (8 letras/números) — anote. Se esquecer o PIN,
+toque em **Esqueci o PIN** e use o código, ou confirme a senha da nuvem. Cinco
+erros seguidos bloqueiam a tela por um tempo crescente.
+
+## Verificação automatizada
+
+```bash
+cd testes && npm install && npm test
+```
+
+Carrega o `index.html` real num DOM simulado e executa os fluxos do app
+(PIN, sync entre aparelhos, import de backup, valores em formato BR, XSS,
+compressão de fotos, CSV…). Detalhes em [AUDITORIA.md](AUDITORIA.md).

@@ -58,19 +58,21 @@ function criarStubFirebase(docCompartilhado, opts = {}) {
       }
       this.currentUser = { uid: 'u1', email };
       return Promise.resolve(this.currentUser);
-    }
+    },
+    // como no SDK real: o estado chega de forma assíncrona (restaurado do IndexedDB)
+    onAuthStateChanged(cb) { setTimeout(() => { try { cb(this.currentUser); } catch (e) { } }, 20); return () => { }; }
   };
+  const offline = () => opts.window && opts.window.navigator && opts.window.navigator.onLine === false;
+  const semRede = () => { const e = new Error('unavailable'); e.code = 'unavailable'; return e; };
+  const notificar = () => setTimeout(() => ouvintes.forEach(cb => { try { cb(doc); } catch (e) { } }), 0);
   const doc = {
     get exists() { return docCompartilhado.v !== null; },
     data() { return docCompartilhado.v; },
     set(d) {
       // sem internet a escrita falha, como no aparelho real
-      if (opts.window && opts.window.navigator && opts.window.navigator.onLine === false) {
-        const e = new Error('unavailable'); e.code = 'unavailable';
-        return Promise.reject(e);
-      }
+      if (offline()) return Promise.reject(semRede());
       docCompartilhado.v = d;
-      setTimeout(() => ouvintes.forEach(cb => { try { cb(doc); } catch (e) { } }), 0);
+      notificar();
       return Promise.resolve();
     },
     onSnapshot(_o, cb, _err) {
@@ -79,11 +81,35 @@ function criarStubFirebase(docCompartilhado, opts = {}) {
       return () => { };
     }
   };
-  const firestore = () => ({
-    enablePersistence: () => Promise.resolve(),
-    collection: () => ({ doc: () => ({ collection: () => ({ doc: () => doc }) }) })
-  });
-  return { __auth: auth, auth: () => auth, initializeApp() { }, firestore };
+  const stubFirebase = {
+    __auth: auth, apps: [],
+    auth() {
+      // SDK real: firebase.auth() lança enquanto initializeApp não rodou
+      if (!this.apps.length) { const e = new Error('No Firebase App'); e.code = 'app/no-app'; throw e; }
+      return auth;
+    },
+    initializeApp() { this.apps.push({}); },
+    firestore: () => ({
+      enablePersistence: () => Promise.resolve(),
+      collection: () => ({ doc: () => ({ collection: () => ({ doc: () => doc }) }) }),
+      // transação: lê o documento ATUAL, aplica a escrita de forma atômica;
+      // offline falha (o SDK real não completa transação sem servidor)
+      runTransaction(fn) {
+        if (offline()) return Promise.reject(semRede());
+        let escrita = null;
+        const t = {
+          get: d => Promise.resolve({ exists: d.exists, data: () => d.data() }),
+          set: (d, val) => { escrita = val; }
+        };
+        return Promise.resolve().then(() => fn(t)).then(r => {
+          if (offline()) throw semRede();
+          if (escrita) { docCompartilhado.v = escrita; notificar(); }
+          return r;
+        });
+      }
+    })
+  };
+  return stubFirebase;
 }
 
 /* ---------- abre o app num jsdom ---------- */
@@ -545,7 +571,7 @@ function importar(w, conteudo, nome) {
   ok('8.22 (A1) o contato da empresa segue no relatório (não foi trocado)',
     /email: 'fernandogpi92@gmail\.com'/.test(SRC) && /EMPRESA\.email|_empresa:EMPRESA/.test(SRC));
   // ---- M7 (parcial): o cache do service worker precisa acompanhar o deploy ----
-  const CACHE_ESPERADO = 'fortcom-v8';   // ← subir junto com cada deploy
+  const CACHE_ESPERADO = 'fortcom-v9';   // ← subir junto com cada deploy
   const cacheNoSw = (SW_SRC.match(/const CACHE='([^']+)'/) || [])[1];
   ok('8.23 (M7) sw.js bumpou o cache neste deploy (' + CACHE_ESPERADO + ')',
     cacheNoSw === CACHE_ESPERADO,
@@ -554,6 +580,175 @@ function importar(w, conteudo, nome) {
   ok('8.13 (L8) exportCSV protege campos com aspas/quebra de linha',
     /csvCell|csvEsc|escCSV|function celCSV/.test(SRC),
     'campos continuam sem aspas de campo');
+
+  /* ---------- 9. A2 — PIN com hash, troca, resgate e bloqueio ---------- */
+  grupo('9. (A2) PIN: hash em vez de literal, troca, resgate e limite de tentativas');
+  const P = await abrirApp({});
+  await entrarPIN(P, '2604');
+  ok('9.1 PIN de fábrica continua abrindo o app (hash padrão)', !P.document.getElementById('pinWrap'));
+  ok('9.2 sha256Hex confere com o hash padrão gravado no fonte',
+    chamar(P, "sha256Hex('fortcom|2604')") === 'dc572defb8c7ead6c2b24b032ff9c0d27ee8f6233eccef4822ca549739b0210d');
+  ok('9.3 hash de "abc" bate com a referência oficial do SHA-256',
+    chamar(P, "sha256Hex('abc')") === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  // troca de PIN via prompt(): atual, novo, repete
+  P.prompt = (() => { const r = ['2604', '1357', '1357']; return () => r.shift(); })();
+  let alertaTroca = ''; P.alert = m => { alertaTroca = String(m); };
+  chamar(P, 'trocarPin()');
+  const hashNovo = P.localStorage.getItem('fortcom_pin_hash');
+  ok('9.4 trocarPin grava o HASH do novo PIN (não o PIN)',
+    hashNovo === chamar(P, "sha256Hex('fortcom|1357')") && hashNovo.indexOf('1357') === -1, hashNovo);
+  const codigo = P.localStorage.getItem('fortcom_pin_resgate') || '';
+  ok('9.5 a troca gera um código de resgate (XXXX-XXXX) e mostra ao dono',
+    /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(codigo) && alertaTroca.indexOf(codigo) > -1, codigo);
+  ok('9.6 o código de resgate vai dentro do backup .json (_resgate)',
+    chamar(P, 'montarBackup()._resgate') === codigo);
+  const seedPin = { fortcom_pin_hash: hashNovo, fortcom_pin_resgate: codigo };
+  const P2 = await abrirApp({ seed: seedPin });
+  await entrarPIN(P2, '2604');
+  ok('9.7 PIN antigo (2604) NÃO abre mais depois da troca', !!P2.document.getElementById('pinWrap'));
+  await entrarPIN(P2, '1357');
+  ok('9.8 PIN novo abre', !P2.document.getElementById('pinWrap'));
+  // resgate: esqueci o PIN -> código -> define outro
+  const P3 = await abrirApp({ seed: seedPin });
+  P3.confirm = () => true;                                   // "tenho o código"
+  P3.prompt = (() => { const r = [codigo.toLowerCase(), '2468', '2468']; return () => r.shift(); })();
+  P3.alert = () => { };
+  P3.document.getElementById('pinEsqueci').click();
+  await espera(150);
+  ok('9.9 "Esqueci o PIN" + código de resgate cria PIN novo e entra',
+    !P3.document.getElementById('pinWrap') &&
+    P3.localStorage.getItem('fortcom_pin_hash') === chamar(P3, "sha256Hex('fortcom|2468')"),
+    P3.document.getElementById('pinErr') ? P3.document.getElementById('pinErr').textContent : 'entrou');
+  ok('9.10 o resgate troca o código (o antigo não vale duas vezes)',
+    P3.localStorage.getItem('fortcom_pin_resgate') !== codigo);
+  // bloqueio progressivo
+  const P4 = await abrirApp({ seed: seedPin });
+  for (let i = 0; i < 5; i++) await entrarPIN(P4, '0000');
+  const msgBloq = P4.document.getElementById('pinErr').textContent;
+  ok('9.11 5 erros seguidos bloqueiam a tela por um tempo', /aguarde/i.test(msgBloq), msgBloq);
+  await entrarPIN(P4, '1357');
+  ok('9.12 bloqueado: nem o PIN certo entra até o tempo passar', !!P4.document.getElementById('pinWrap'));
+  ok('9.13 código de resgate errado não abre',
+    await (async () => {
+      const P5 = await abrirApp({ seed: seedPin });
+      P5.confirm = () => true; P5.prompt = () => 'ZZZZ-ZZZZ'; P5.alert = () => { };
+      P5.document.getElementById('pinEsqueci').click(); await espera(100);
+      return !!P5.document.getElementById('pinWrap') && /inválido/i.test(P5.document.getElementById('pinErr').textContent);
+    })());
+
+  /* ---------- 10. A3 — sincronização com merge (sem perda) ---------- */
+  grupo('10. (A3) Sync com merge de 3 vias: nada se perde, conflito é avisado');
+  const fb2 = { v: null };
+  const S1 = await abrirApp({ fbDoc: fb2, jaLogado: true, sessaoPIN: true });
+  await espera(1600);
+  ok('10.1 aparelho A cria o documento com rev', !!fb2.v && Number(fb2.v.rev) >= 1, JSON.stringify(fb2.v && fb2.v.rev));
+  const S2 = await abrirApp({ fbDoc: fb2, jaLogado: true, sessaoPIN: true });
+  await espera(600);
+  ok('10.2 aparelho B adota o estado da nuvem', estado(S2).obras[0].id === estado(S1).obras[0].id);
+  const setOn = (w, v) => Object.defineProperty(w.navigator, 'onLine', { value: v, configurable: true });
+  // A offline edita a semana 1; B online edita a semana 2 (campos diferentes) e o cliente
+  setOn(S1, false);
+  chamar(S1, "obras[0].semanas[0].funcionarios.push({id:'f_off',nome:'OFFLINE A',funcao:'Pedreiro',diaria:180,pix:'',extras:0,adiantamento:0,dias:{seg:1,ter:1,qua:0,qui:0,sex:0,sab:0,dom:0}}); obras[0].endereco='RUA A'; saveNow();");
+  await espera(1400);
+  chamar(S2, "obras[0].semanas[1].valorRecebido=3000; obras[0].cliente='CLIENTE B'; obras[0].endereco='RUA B'; saveNow();");
+  await espera(1600);
+  ok('10.3 B gravou na nuvem enquanto A estava offline', !!fb2.v && fb2.v.payload.indexOf('CLIENTE B') > -1);
+  setOn(S1, true); S1.dispatchEvent(new S1.Event('online'));
+  await espera(2600);
+  const nuvem = JSON.parse(fb2.v.payload).obras[0];
+  ok('10.4 lançamento OFFLINE de A sobreviveu (funcionário na semana 1)',
+    nuvem.semanas[0].funcionarios.some(f => f.id === 'f_off'), JSON.stringify(nuvem.semanas[0].funcionarios.map(f => f.nome)));
+  ok('10.5 edição de B sobreviveu (recebido da semana 2 + cliente)',
+    Number(nuvem.semanas[1].valorRecebido) === 3000 && nuvem.cliente === 'CLIENTE B');
+  await espera(800);
+  ok('10.6 B recebeu o funcionário lançado offline por A',
+    estado(S2).obras[0].semanas[0].funcionarios.some(f => f.id === 'f_off'));
+  ok('10.7 A recebeu o recebido lançado por B',
+    Number(estado(S1).obras[0].semanas[1].valorRecebido) === 3000 && estado(S1).obras[0].cliente === 'CLIENTE B');
+  const confA = JSON.parse(S1.localStorage.getItem('fortcom_conflitos') || '[]');
+  const confB = JSON.parse(S2.localStorage.getItem('fortcom_conflitos') || '[]');
+  ok('10.8 o campo editado nos DOIS lados (endereço) gerou registro de conflito',
+    confA.some(c => /endereco/.test(c.campo)) || confB.some(c => /endereco/.test(c.campo)),
+    JSON.stringify(confA.concat(confB).map(c => c.campo)));
+  ok('10.9 endereço ficou com UM dos valores (não sumiu, não virou lixo)',
+    ['RUA A', 'RUA B'].indexOf(nuvem.endereco) > -1 && estado(S1).obras[0].endereco === nuvem.endereco && estado(S2).obras[0].endereco === nuvem.endereco,
+    nuvem.endereco + ' / A=' + estado(S1).obras[0].endereco + ' / B=' + estado(S2).obras[0].endereco);
+  ok('10.10 o registro de conflito também foi para o documento (outro aparelho vê)',
+    Array.isArray(fb2.v.conflitos) && fb2.v.conflitos.some(c => /endereco/.test(c.campo)),
+    JSON.stringify(fb2.v.conflitos));
+  ok('10.11 existe função para o dono ver os conflitos (mostrarConflitos)', typeof S1.mostrarConflitos === 'function');
+  // exclusão de um lado, sem edição do outro: some dos dois
+  const antesQtd = estado(S1).obras[0].semanas.length;
+  const alvo = estado(S1).obras[0].semanas[antesQtd - 1].id;
+  chamar(S1, 'removeWeek(' + JSON.stringify(alvo) + ')');
+  await espera(2200);
+  ok('10.12 semana excluída em A some em B (sem ressuscitar no merge)',
+    !estado(S2).obras[0].semanas.find(w => w.id === alvo), 'qtd B=' + estado(S2).obras[0].semanas.length);
+  ok('10.13 (M5) tamanho do payload é monitorado (limite 1 MB)',
+    /LIMITE_DOC=1048576/.test(SRC) && /payload\.length>LIMITE_DOC/.test(SRC));
+  ok('10.14 (M5) alerta antes de estourar (~800 KB)', /AVISO_DOC=800\*1024/.test(SRC));
+
+  /* ---------- 11. M6 — compressão de fotos ---------- */
+  grupo('11. (M6) Fotos comprimidas antes de ir para o localStorage');
+  const FO = await abrirApp({});
+  await entrarPIN(FO, '2604');
+  // imagem "grande": 3000x2000 (o Image do jsdom não decodifica; simulamos as dimensões)
+  const ImgOrig = FO.Image;
+  FO.Image = function () {
+    const el = new ImgOrig();
+    Object.defineProperty(el, 'naturalWidth', { value: 3000 });
+    Object.defineProperty(el, 'naturalHeight', { value: 2000 });
+    Object.defineProperty(el, 'src', { set() { setTimeout(() => el.onload && el.onload(), 0); } });
+    return el;
+  };
+  let dimsCanvas = null;
+  FO.HTMLCanvasElement.prototype.toDataURL = function (tipo, q) { dimsCanvas = { w: this.width, h: this.height, tipo, q }; return 'data:image/jpeg;base64,' + 'A'.repeat(1000); };
+  FO.__arquivoData = 'data:image/png;base64,' + 'B'.repeat(200000);
+  chamar(FO, "handleFotos({target:{files:[{name:'obra.png'}],value:''}})");
+  await espera(200);
+  const fotoSalva = (lerLS(FO, 'obra_control_v4_fotos') || [])[0];
+  ok('11.1 a foto salva é a versão comprimida (JPEG), não o base64 cru',
+    !!fotoSalva && fotoSalva.src.indexOf('data:image/jpeg') === 0 && fotoSalva.src.length < 2000,
+    fotoSalva ? fotoSalva.src.slice(0, 30) + ' len=' + fotoSalva.src.length : 'nenhuma foto');
+  ok('11.2 redimensiona para no máximo 1280 px no maior lado (3000x2000 → 1280x853)',
+    !!dimsCanvas && dimsCanvas.w === 1280 && dimsCanvas.h === 853, JSON.stringify(dimsCanvas));
+  ok('11.3 JPEG com qualidade ~0.72', !!dimsCanvas && dimsCanvas.tipo === 'image/jpeg' && quase(dimsCanvas.q, 0.72, 0.01));
+  ok('11.4 galeria mostra o uso de memória', /MB usados/.test(FO.document.getElementById('galeriaCount').textContent),
+    FO.document.getElementById('galeriaCount').textContent);
+
+  /* ---------- 12. L4/L5 — obra sem semanas e ids obsoletos ---------- */
+  grupo('12. (L4/L5) Obra com 0 semanas e semana inexistente não derrubam o app');
+  const Z = await abrirApp({ seed: { 'obra_control_v4': JSON.stringify({ obras: [{ id: 'o1', nome: 'VAZIA', valorTotal: 1000, semanas: [], etapas: [], diario: [], despesas: [] }], currentObraId: 'o1' }) } });
+  await entrarPIN(Z, '2604');
+  ok('12.1 abre obra sem semanas sem erro de JS', errosReais(Z).length === 0, resumo(errosReais(Z)));
+  let quebrou = null;
+  try { chamar(Z, 'openWeekModal()'); } catch (e) { quebrou = e.message; }
+  ok('12.2 "+ Nova semana" abre com obra vazia (sugere a semana atual)',
+    !quebrou && Z.document.getElementById('modalWeek').classList.contains('open') && /^\d{4}-\d{2}-\d{2}$/.test(Z.document.getElementById('wInicio').value), quebrou || '');
+  quebrou = null;
+  try { chamar(Z, "selectWeek('nao_existe')"); chamar(Z, 'changeWeek(1)'); } catch (e) { quebrou = e.message; }
+  ok('12.3 selectWeek/changeWeek com id inexistente não quebram', !quebrou, quebrou || '');
+  ok('12.4 topo mostra estado vazio em vez de quebrar', /SEM SEMANA/.test(Z.document.getElementById('weekLabel').textContent));
+  chamar(Z, "document.getElementById('wNumero').value='1'; document.getElementById('wInicio').value='2026-09-07'; document.getElementById('wFim').value='2026-09-13'; saveWeek();");
+  await espera(600);
+  ok('12.5 criar a 1ª semana numa obra vazia funciona', estado(Z).obras[0].semanas.length === 1 && estado(Z).currentWeekId === estado(Z).obras[0].semanas[0].id);
+
+  /* ---------- 13. L8 — CSV ---------- */
+  grupo('13. (L8) CSV seguro para Excel BR');
+  const X = await abrirApp({});
+  await entrarPIN(X, '2604');
+  // o Blob do jsdom não tem .text(): captura o conteúdo na construção
+  let txtCsv = '';
+  const BlobOrig = X.Blob;
+  X.Blob = function (partes, o) { txtCsv = (partes || []).join(''); return new BlobOrig(partes, o); };
+  X.URL.createObjectURL = () => 'blob:x'; X.URL.revokeObjectURL = () => { };
+  X.HTMLAnchorElement.prototype.click = function () { };
+  chamar(X, "obras[0].nome='OBRA \"TESTE\"; RUA'; obras[0].semanas[0].funcionarios.push({id:'f1',nome:'JOAO;SILVA',funcao:'Pedreiro',diaria:150.5,pix:'=cmd|x',extras:0,adiantamento:0,dias:{seg:1,ter:0,qua:0,qui:0,sex:0,sab:0,dom:0}}); exportCSV();");
+  ok('13.1 campo com ; e aspas vai entre aspas (aspas dobradas)', txtCsv.indexOf('"OBRA ""TESTE""; RUA"') > -1, txtCsv.split('\n')[0]);
+  ok('13.2 nome com ; não quebra a coluna', txtCsv.indexOf('"JOAO;SILVA"') > -1);
+  ok('13.3 decimal com vírgula (150,5) para o Excel BR', /;150,5;/.test(txtCsv));
+  ok('13.4 célula começando com = não vira fórmula (injeção de CSV)', txtCsv.indexOf("'=cmd|x") > -1);
+  ok('13.5 relatórios (aba) passam a ser renderizados', X.document.getElementById('resumoFinanceiro').innerHTML.length > 0);
 
   /* ---------- resumo ---------- */
   console.log('\n\x1b[1m---------------------------------------------\x1b[0m');

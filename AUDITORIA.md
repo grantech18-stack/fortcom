@@ -6,6 +6,8 @@
 
 **Status (03/09/2026):** correções rápidas **M1, M2, M3, L1, L3 e M8 aplicadas** + **lado do app do A1 pronto** (login de nuvem com Firebase Auth — falta publicar as rules no console). Restam os itens Alto (A2–A4, A1 pendente só do console) e os demais Médio/Baixo (M4–M7, L2, L4–L10).
 
+**Rodada 3 (04/09/2026, tarde):** **todos os itens abertos foram corrigidos** — A2 (PIN com hash + troca + resgate + bloqueio), A3 (sync com merge de 3 vias e registro de conflitos), A4 (`esc()`/`arg()` em todo o render, PDF e CSV), M4 (grava só quando muda; backup diário virou lembrete), M5 (monitor de 1 MB), M6 (fotos comprimidas), M7 (SW com allowlist + teto, `fortcom-v9`), L2 (−25 KB de código morto), L4, L5, L8. De quebra, **4 achados novos** corrigidos (L13–L16, abaixo). A suíte foi ampliada para **128 verificações — 128 ok / 0 falhando**. A1 continua dependendo só do console (publicar `firestore.rules` + criar o usuário). Ver [Rodada 3](#rodada-3-04092026--fechamento-dos-itens-abertos).
+
 **Re-verificação (04/09/2026):** as correções de 03/09 foram **re-executadas e confirmadas** por uma suíte automatizada que agora vive no repositório (`testes/suite.js`, jsdom). Na primeira rodada: 72 verificações, 55 ok, 17 falhando, todas as falhas mapeadas para itens abertos. Foram encontrados **2 achados novos** (L11 e L12) e **1 nuance do M3** que limitava o alcance da correção. **L11 e L12 foram corrigidos na sequência**, o texto das *rules* foi versionado (`firestore.rules` + `firebase.json` + `FIREBASE.md`) e a suíte ampliada para **87 verificações — 72 ok / 15 falhando** (restam A2, A3, A4, M4, M5, M6, M7, L2, L4, L5, L8). Ver [Verificação automatizada](#verificação-automatizada-04092026). O alvo passou a **3.983 linhas** (`index.html`) + 32 (`sw.js`).
 
 ## Resumo executivo
@@ -16,7 +18,7 @@ O sistema funciona e está bem estruturado para o que é (app offline-first em a
 |---|---|
 | Alto | 4 |
 | Médio | 8 |
-| Baixo | 12 (L11 e L12 acrescentados em 04/09/2026) |
+| Baixo | 16 (L11 e L12 acrescentados em 04/09/2026; L13–L16 na rodada 3) |
 
 ---
 
@@ -39,16 +41,19 @@ Ou seja: **qualquer pessoa na internet** que conheça o endereço do documento (
 `index.html` L3748 (`var PIN = '2604'`)
 O PIN é fixo no código (qualquer um lê no fonte) e a tela não tem alternativa: sem o PIN o app não abre. Se o dono esquecer o PIN, o único caminho é limpar os dados do site — o que **apaga também o localStorage** (os dados locais da obra). Num app de gestão, esse é o cenário de perda total mais provável.
 **Recomendação:** permitir troca do PIN dentro do app (guardado hasheado, não em claro), e uma rota de resgate (pergunta secreta, código impresso no backup, ou redefinir após carregar um backup). Também: 4 tentativas → aviso; hoje não há limite.
+✅ **Corrigido em 04/09/2026** — o literal sumiu do fonte: fica só o SHA-256 de `fortcom|<pin>` (`PIN_PADRAO_HASH`; `sha256Hex` em JS puro, validado contra o `crypto` do Node) e o hash escolhido pelo dono vai para `localStorage` (`fortcom_pin_hash`). **Ferramentas → Trocar PIN de acesso** pede o atual, aceita 4–8 dígitos e gera um **código de resgate** `XXXX-XXXX` (mostrado na hora e gravado em `_resgate` no backup `.json`). Na tela de PIN, **Esqueci o PIN** aceita o código de resgate ou a **senha da nuvem** (Firebase Auth = dono) e cria um PIN novo. 5 erros seguidos → bloqueio de 30 s, dobrando a cada erro extra (máx. 8 min). Enquanto o PIN de fábrica estiver em uso a tela avisa para trocar. Testes 9.1–9.13.
 
 ### A3 — Sincronização "quem escreve por último ganha": perda silenciosa de dados
 `index.html` ~L3795–3825 (`enviar`/`aplicar`)
 O modelo é: qualquer mudança no aparelho A sobe o **estado inteiro**; o aparelho B aplica cegamente (`obras = o.obras`) e apaga tudo o que tinha local. Cenário comum: A edita a semana 5, B edita a semana 6, B salva depois → **as edições da semana 5 somem sem aviso**. Piora: `saveNow` é chamado no `beforeunload`, mas o `ref.set()` é assíncrono e a página morre antes — a última edição do dia pode não subir.
 **Recomendação:** versionar o estado (`updatedAt` + `rev` por obra/semana); ao aplicar, comparar com o local e, em conflito, notificar o usuário (chip/overlay) em vez de sobrescrever; no `pagehide`/`beforeunload` usar `navigator.sendBeacon` ou o `await` do `set()` quando possível.
+✅ **Corrigido em 04/09/2026** — cada aparelho guarda a **base** (último estado confirmado em comum, `fortcom_sync_base`). Ao receber: **merge de 3 vias** (base × local × nuvem) por obra/semana/funcionário/etapa/diário/despesa/campo (`merge3`); só mudança dos dois lados no mesmo campo é conflito — fica a versão local e o valor descartado vai para `conflitos` (no documento e em `fortcom_conflitos`), com toast e chip vermelho "⚠ N conflitos — toque para ver" nos dois aparelhos (`mostrarConflitos`). Ao gravar: `runTransaction` lê o doc atual, mescla se a nuvem mudou desde a base e sobe `rev+1` — nunca sobrescreve o que não viu. Offline a transação falha e fica pendente até o `online`. Seleção de obra/semana saiu do payload comparado (é estado de tela, não gera conflito). Testes 7.9a–c e 10.1–10.12 (edição offline em A + edição online em B: **as duas sobrevivem**; campo editado dos dois lados vira registro de conflito; exclusão sem edição do outro lado não ressuscita). O `beforeunload` continua best-effort (o Firestore compat não expõe `sendBeacon`); a diferença é que agora nada se perde quando o outro aparelho grava antes.
 
 ### A4 — XSS armazenado (dados do usuário viram HTML)
 Exemplos: L1857–1861 (`renderSidebarObras` e `renderObraSelector`: `${o.nome}` em `innerHTML` e em `onclick="switchObra('${o.id}')"`), L2050–2070 (`renderWeekTable`: `title="${f.pix}"` e `navigator.clipboard.writeText('${f.pix}')` — uma aspas na chave PIX quebra o JS e vira injeção), `renderExtras`/`renderDiario`/`renderDespesas` (descrições, atividades, fornecedores entram crus), `openFoto` (`f.nome`, `f.obraNome`), e o PDF de `gerarRelatorioPDF()` (mesma história na janela de impressão).
 Sozinho é risco baixo (quem digita é o dono); **combinado com A1 é crítico**: quem conseguir gravar no documento do Firestore entrega um script que roda no aparelho do dono, com acesso a tudo (localStorage, backups, dados digitados depois).
 **Recomendação:** criar `esc(s)` (substituir `&<>"'`) e usar em **todo** `innerHTML`/atributo que contenha dado; nunca interpolar em `onclick` (usar `addEventListener` ou `data-id`); também corrige o `exportCSV` (campos com `"`/quebra de linha quebram o CSV hoje).
+✅ **Corrigido em 04/09/2026** — `esc(v)` (`&<>"'`) e `arg(v)` (`JSON.stringify` + `esc`, para handlers inline) aplicados em **todos** os pontos que interpolam dado do usuário: sidebar/seletor de obras, tabela da semana (nome, função, iniciais, PIX), custos extras, banner, legenda do donut, financeiro, abas Semanas/Funcionários/Relatórios, galeria e lightbox (com `srcFoto()`: só `data:image/*` ou `blob:` viram `<img src>`), orçamento/etapas, Curva ABC, diário, despesas (tabela, filtros, seletor de obra e de etapa), comparativo por obra e o **relatório PDF** inteiro. Os 23 `onclick="fn('${id}')"` viraram `onclick="fn(${arg(id)})"`; a chave PIX passou a ser copiada por `copiarPix()` (não entra mais em JS inline). `fmtDate`/`fmtShort` só formatam ISO válido (qualquer outra coisa sai escapada) e `sanitizarSemanas` valida `status`/`numero`. Testes 6.1–6.5 (o `<img onerror>` no nome **não cria nó** nem executa) e o smoke manual com `<b>`, `<svg onload>`, `"`/`'` em nome, PIX, descrição, fornecedor, etapa, diário e nome de obra.
 
 ---
 
@@ -73,18 +78,22 @@ L2246 (`fDiaria`), L2307 (`wRecebido`), L2383 (`editPagamento` → `parseFloat(n
 ### M4 — Backup automático por download não funciona no celular (e grava a toa)
 `checarBackupAuto()` roda a cada `saveNow()` — que há um `setInterval` de **30 s** mesmo sem mudança alguma (`index.html` ~L1780). O download programático (`baixarBackup(true)`) fora de gesto do usuário é bloqueado pelo Chrome mobile: o "backup diário" que o README promete provavelmente **nunca chega a baixar no canteiro**. E a gravação a cada 30 s força `JSON.stringify` + `localStorage.setItem` permanentes (bateria/flash em aparelho velho).
 **Recomendação:** salvar só quando houve mudança (`pacote() !== ultimo`); para o backup diário, avisar no app ("há backup pendente de hoje — tocar para baixar") em vez de download automático.
+✅ **Corrigido em 04/09/2026** — `saveNow()` compara o JSON com `_ultimoGravado` e **não toca no disco** se nada mudou (retorna `false`; `saveNow(true)` força). O "backup automático" virou **lembrete**: toast 1× por dia após 1 min de uso + selo *hoje pendente* ao lado de "Backup agora" (`#bkpPendente`, `atualizarAvisoBackup`); o download só acontece com toque do usuário. Rótulo do botão passou a "Lembrete de backup: LIGADO/DESLIGADO". Teste 8.7 + smoke (`saveNow()` ×2 sem mudança → `false`, localStorage idêntico).
 
 ### M5 — Limite de 1 MB do doc Firestore + erro enganoso
 O payload sincroniza **tudo** (obras, etapas, diário, despesas). Quando o estado passar de 1 MB, `ref.set()` falha com erro 400 e o chip mostra "Aguardando internet" — o usuário acha que é rede, quando é tamanho. Sem alerta prévio, a sincronização simplesmente **para de funcionar um dia**.
 **Recomendação:** monitorar `pacote().length` e alertar acima de ~800 KB; dividir em múltiplos docs (um por obra) resolve junto com A1.
+✅ **Corrigido em 04/09/2026** — `enviar()` mede `payload.length`: acima de `AVISO_DOC` (800 KB) mostra toast pedindo backup; acima de `LIMITE_DOC` (1 MB) **não tenta gravar** e o chip fica vermelho "Nuvem: dados acima de 1 MB" (em vez de "Aguardando internet"). Erros `invalid-argument`/"maximum size" do Firestore caem na mesma mensagem; `permission-denied` mostra "sem permissão (regras)". Testes 7.11, 10.13, 10.14. Dividir em doc por obra continua como evolução futura.
 
 ### M6 — Fotos em localStorage sem compressão (cota ~5 MB)
 `handleFotos()` grava a foto crua em base64 (~2–4 MB cada). Duas ou três fotos lotam a cota; a partir daí **todos os saves falham** (o app só mostra o toast "memória cheia"). O app inteiro pode ficar gravando nada.
 **Recomendação:** comprimir via `<canvas>` (máx. ~1280 px, JPEG q≈0.7) antes de salvar; mostrar uso da cota e alertar perto do limite; a galeria já era o maior custo — com compressão cabe muito mais.
+✅ **Corrigido em 04/09/2026** — `comprimirFoto()` redimensiona para no máximo **1280 px** no maior lado e grava **JPEG q=0.72** (mantém o original se o canvas falhar ou se a versão comprimida sair maior). `saveFotos()` trata `QuotaExceededError` com mensagem clara; o contador da galeria mostra **"X MB usados"** (`usoArmazenamento`) e há alerta acima de 4 MB. Testes 11.1–11.4 (3000×2000 → 1280×853, JPEG).
 
 ### M7 — Service Worker: cache sem limite e versão fixa
 `sw.js`: o handler de fetch faz `c.put` de **qualquer GET** (inclusive cross-origin: gstatic, fontes, beacon) sem LRU nem limite de entradas → PWA instalado por meses pode estourar a cota de cache do navegador. `CACHE='fortcom-v6'` nunca muda: entradas de versões antigas de SDK acumulam.
 **Recomendação:** limitar o cache à origem + allowlist (gstatic do firebase), impor teto (ex.: 60 entradas ou 30 MB com LRU), e bumpar `fortcom-vN` a cada deploy.
+✅ **Corrigido em 04/09/2026** — `sw.js`: só cacheia a própria origem + `www.gstatic.com` + `fonts.googleapis.com`/`fonts.gstatic.com` (`ORIGENS_OK`); tudo o mais vai direto à rede. Teto de **60 entradas** (`MAX_ENTRADAS`, `limitarCache` apaga as mais antigas e nunca o essencial); respostas de erro não entram; Auth (`identitytoolkit`/`securetoken`) também fica fora do SW. Cache bumpado para **`fortcom-v9`**. Testes 8.9 e 8.23.
 
 ### M8 — Resíduos de Cloudflare no HTML (telemetria de terceiros + 404s)
 `index.html` L3859–3860: um `beacon.min.js` do Cloudflare Insights **com o token do site onde este HTML foi salvo** (análise/envio de métricas para a conta de terceiros) e um script de challenge que injeta iframe oculto e carrega `/cdn-cgi/challenge-platform/...` **da origem atual** — no GitHub Pages isso 404 silenciosamente. Os dois não fazem nada útil aqui.
@@ -98,16 +107,20 @@ O payload sincroniza **tudo** (obras, etapas, diário, despesas). Quando o estad
 | # | Achado | Onde |
 |---|---|---|
 | L1 | ~~Ano `2026` hardcoded para o nome do mês~~ — o nome do mês vinha de `new Date(2026, …)`; agora o ano vem da própria coluna (`mes`, formato `M/AAAA`). (Cosmético: os nomes de mês pt-BR não dependem do ano e a linha já mostrava o `mes` real.) ✅ **corrigido em 03/09/2026** | L2626 (atual L2671) |
-| L2 | Código morto/dados de exemplo: `obrasModelo` com 4 obras fictícias no `seed()`, `OBRA_KEY` (nunca usada), `LOGO_BRANCA` (~10 KB de base64, nunca usada), `backupJSON` original **e** o patch (nenhum botão chama mais — o UI usa `baixarBackup`), `_orig*` | L1578–1583, 1508, 1521, 2657/2805, 2807–2812 |
+| L2 | ~~Código morto/dados de exemplo: `obrasModelo` com 4 obras fictícias no `seed()`, `OBRA_KEY` (nunca usada), `LOGO_BRANCA` (~10 KB de base64, nunca usada), `backupJSON` original **e** o patch (nenhum botão chama mais — o UI usa `baixarBackup`), `_orig*`~~ ✅ **corrigido em 04/09/2026** — removidos `obrasModelo`, `OBRA_KEY`, `LOGO_BRANCA`, `LOGO_ICONE` (também nunca usada), `backupJSON` + patch, `importFile` original (o patch virou a única definição) e `_orig*`; `seed()` simplificado. **−25 KB** no `index.html` (teste 8.10) | — |
 | L3 | ~~Primeiro acesso abria na **semana 5**~~ (o seed gera a semana atual no índice 0, mas `load()` escolhia `semanas[4]` — sobra da versão antiga). Agora a abertura sem semana salva escolhe a **semana que cobre hoje** (helper `semanaDeHoje`), com fallback para a 1ª. ⚠️ muda o comportamento do 1º acesso (de semana 5 para a semana atual) ✅ **corrigido em 03/09/2026** | L1643 (atual L1669) |
-| L4 | `openWeekModal()` quebra se a obra tiver 0 semanas (`weeks[weeks.length-1]` undefined) — possível após importar obra vazia | L2281 |
-| L5 | `selectWeek`/`changeWeek` não validam semana existente (ID obsoleto após restaurar backup → crash) | L2102–2108 |
+| L4 | ~~`openWeekModal()` quebra se a obra tiver 0 semanas (`weeks[weeks.length-1]` undefined) — possível após importar obra vazia~~ ✅ **corrigido em 04/09/2026** — sugere a segunda-feira desta semana; além disso `updateTopbar`, `renderKPIs`, `renderWeeksGrid`, `renderLine`, `renderFinanceChart`, `renderRelatorios`, `addCustoExtra` e `openFuncModal` toleram obra com 0 semanas (confirmado: antes o **boot** com obra vazia já lançava `TypeError`). Testes 8.12, 12.1–12.5 | L2281 |
+| L5 | ~~`selectWeek`/`changeWeek` não validam semana existente (ID obsoleto após restaurar backup → crash)~~ ✅ **corrigido em 04/09/2026** — `selectWeek` avisa "Semana não encontrada"; `syncCurrentObra()` garante `currentWeekId` válido (semana de hoje ou a 1ª) sempre que a obra muda; `switchObra` abre na semana de hoje. Testes 8.11, 12.3 | L2102–2108 |
 | L6 | PWA: manifest e ícones 100% em `data:` URI — no iPhone o `apple-touch-icon` pode não aparecer e no Android os critérios de instalabilidade podem falhar (sem ícones fetcháveis) | L7–8 |
 | L7 | A11y: dezenas de botões só com `title` (✎ ✕ ‹ › ☰ ◐) e sem `aria-label` | body inteiro |
-| L8 | `exportCSV`: sem aspas de campo (quebra com `"` ou quebra de linha) e decimal com `.` em Excel BR | L2632 |
+| L8 | ~~`exportCSV`: sem aspas de campo (quebra com `"` ou quebra de linha) e decimal com `.` em Excel BR~~ ✅ **corrigido em 04/09/2026** — `csvCell()`/`csvLinha()`: texto com `;`, `"` ou quebra de linha vai entre aspas (aspas dobradas), números saem com **vírgula decimal**, células começando com `= + - @` ganham apóstrofo (injeção de fórmula). Testes 8.13, 13.1–13.4 | L2632 |
 | L9 | `gerarRelatorioPDF` usa `document.write` + popup (bloqueador comum); o HTML do relatório também não escapa dados (ver A4) | L3266+ |
 | L10 | Arquivo único de 376 KB no repo: diff/merge impossíveis de revisar, cache HTTP ineficiente; considerar `index.html` + `app.js` + `estilo.css` + `manifest.json` + ícones | — |
 | L11 | ~~**Novo (04/09):** `setTimeout(…,350)` chamava `pinInput.focus()` depois que a tela de PIN foi removida → `TypeError` em toda abertura em que o PIN é digitado rápido~~ ✅ **corrigido em 04/09/2026** (guarda `if(_pin)`; teste 1.9) | L3896 |
+| L13 | ~~**Novo (04/09, rodada 3):** a aba **Relatórios** abria sempre vazia — `renderRelatorios()` existia mas **nunca era chamada** (nem no `render()` nem no `switchTab`)~~ ✅ **corrigido em 04/09/2026** — entrou no `render()`; ticket médio protegido contra divisão por zero (teste 13.5) | L2621 |
+| L14 | ~~**Novo (04/09, rodada 3):** o botão **"Entrar na nuvem" travava em "Entrando…"** para sempre com o SDK real: `firebase.auth()` lança `app/no-app` enquanto `initializeApp` não rodou — e `initializeApp` só rodava dentro de `iniciar()`, **depois** do login. O stub da suíte não lançava, por isso passava~~ ✅ **corrigido em 04/09/2026** — `fbApp()` inicializa o app (1×) antes de qualquer `firebase.auth()`; `depoisDoPin` espera o 1º `onAuthStateChanged` (o usuário persistido chega de forma assíncrona — antes o aparelho já logado via a tela de login de novo a cada abertura). O stub da suíte passou a se comportar como o SDK (lança sem `initializeApp`, `onAuthStateChanged` assíncrono, `runTransaction`) | L3847, 3957 |
+| L15 | ~~**Novo (04/09, rodada 3):** data **fixa** "03/09/2026" no cabeçalho~~ ✅ **corrigido em 04/09/2026** — `#hdrHoje` recebe a data do dia no `init` | L661 |
+| L16 | ~~**Novo (04/09, rodada 3):** `saveFotos()` gravava sem `try/catch` — a `QuotaExceededError` de uma foto grande subia como exceção não tratada e a foto sumia sem aviso~~ ✅ **corrigido em 04/09/2026** — mensagem "Memória cheia: a foto NÃO foi salva…" (junto com M6) | L2725 |
 | L12 | ~~**Novo (04/09):** `<input type="number">` devolve `""` para `150,50` → o usuário não conseguia digitar formato BR nos campos de dinheiro (anulava o M3)~~ ✅ **corrigido em 04/09/2026** (`type="text" inputmode="decimal"` nos 7 campos; testes 4.8–4.17, 8.14–8.16) | L1208, 1301, 1355, 1363, 1367, 1419, 1449 |
 
 ---
@@ -204,6 +217,37 @@ devolvia `""`), agora o valor BR chega inteiro nos 7 campos.
 
 ---
 
+## Rodada 3 (04/09/2026) — fechamento dos itens abertos
+
+**Resultado da suíte: 128 verificações · 128 ok · 0 falhando** (`cd testes && npm test`).
+Grupos novos: **9** (A2 — hash, troca, resgate, bloqueio), **10** (A3 — merge de 3 vias
+entre 2 aparelhos, com um deles offline; conflitos registrados; exclusão não ressuscita),
+**11** (M6 — compressão), **12** (L4/L5 — obra vazia), **13** (L8 — CSV + L13).
+
+| Item | Como foi fechado | Evidência |
+|---|---|---|
+| **A4** | `esc()` + `arg()` em todo `innerHTML`/atributo/handler com dado do usuário; `srcFoto()`; PDF e CSV | 6.1–6.5, smoke com 8 vetores de injeção → 0 nós criados, nada executado |
+| **A2** | hash SHA-256 do PIN; troca; código de resgate (também no backup); reset pela senha da nuvem; bloqueio progressivo | 8.5, 8.6, 9.1–9.13 |
+| **A3** | base local + merge de 3 vias ao receber; `runTransaction` com merge ao gravar; `rev`; registro de conflitos nos dois lados | 7.9a–c, 7.10, 10.1–10.12 |
+| **M5** | `payload.length` vs 800 KB / 1 MB, chip específico, erros do Firestore mapeados | 7.11, 10.13, 10.14 |
+| **M4** | `saveNow` só grava quando muda; backup diário = lembrete + selo | 8.7, smoke |
+| **M6** | canvas 1280 px / JPEG 0.72; uso de memória na galeria; quota tratada | 8.8, 11.1–11.4 |
+| **M7** | allowlist de origens + teto de 60 entradas; `fortcom-v9` | 8.9, 8.23 |
+| **L2** | −25 KB de código morto | 8.10 |
+| **L4/L5** | obra com 0 semanas e ids obsoletos tolerados em todo o render | 8.11, 8.12, 12.1–12.5 |
+| **L8** | `csvCell()`: aspas, vírgula decimal, anti-fórmula | 8.13, 13.1–13.4 |
+| **L13–L16** | Relatórios renderizada; login da nuvem destravado; data do dia; quota das fotos | 13.5, 7.1–7.5 com stub realista |
+
+**Compatibilidade:** nenhum formato de dado mudou (`obra_control_v4`, backup `.json`, `firestore.rules`).
+Chaves novas no `localStorage`: `fortcom_pin_hash`, `fortcom_pin_resgate`, `fortcom_pin_tent`,
+`fortcom_pin_bloq`, `fortcom_sync_base`, `fortcom_conflitos`. Campos novos no documento
+Firestore: `aba`, `rev`, `conflitos` (versões antigas do app ignoram; as regras não mudam).
+
+**Ainda pendente (fora do código):** A1 — publicar `firestore.rules` e criar o usuário
+`gran.tech18@gmail.com` no console. E as evoluções L6 (ícones fetcháveis), L7 (a11y —
+os botões ✎/✕ gerados já ganharam `aria-label` nesta rodada; faltam os estáticos), L9
+(PDF sem popup) e L10 (dividir o arquivo).
+
 ## O que está bem feito (para não mexer)
 
 - **Offline-first de verdade:** rede-primeiro com fallback de cache, Firebase SDK precacheado no `sw.js`, Firestore persistence habilitado.
@@ -222,6 +266,6 @@ devolvia `""`), agora o valor BR chega inteiro nos 7 campos.
 4. **Estrutura:** A4 (escape + `esc()` em tudo), A2 (troca de PIN + resgate), M4 (save só em mudança + aviso de backup pendente), M6 (compressão de fotos), M7 (SW com teto).
 5. **Projeto:** A3 (versão/conflicto na sync) + M5 (docs por obra) — é o passo que transforma a "nuvem" em sincronização de verdade (junto com A1).
 
-> Cada item concluído deve manter `cd testes && npm test` sem novas falhas: as **64
+> Cada item concluído deve manter `cd testes && npm test` sem novas falhas: as **128
 > verificações que passam hoje** são a régua de regressão (dados do usuário nunca podem
-> sumir).
+> sumir). Lembrar de bumpar `CACHE` no `sw.js` **e** `CACHE_ESPERADO` na suíte a cada deploy.

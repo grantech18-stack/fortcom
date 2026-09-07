@@ -9,11 +9,34 @@ celular (`obra_control_v4`), e o backup `.json` é o que garante a recuperação
 | Recurso | Onde está no código | Para quê |
 |---|---|---|
 | Firebase Auth (e-mail/senha) | `index.html` — `firebase.auth().signInWithEmailAndPassword` na tela "Nuvem FORTCOM" | cada aparelho autentica uma vez; a sessão fica persistida |
-| Firestore, documento único | `index.html` — `DOCPATH = ['empresas','fortcom','dados','principal']` | guarda `{ payload, dev, updatedAt }`; o `payload` é o estado inteiro em JSON |
+| Firestore, documento único | `index.html` — `DOCPATH = ['empresas','fortcom','dados','principal']` | guarda `{ payload, dev, aba, updatedAt, rev, conflitos }`; o `payload` é o estado inteiro (obras) em JSON, `rev` cresce a cada gravação e `conflitos` lista as últimas edições concorrentes resolvidas |
 | SDK (compat 10.12.2) | `index.html` + `sw.js` (precache) | app / firestore / auth |
 
 Fotos **não** vão para a nuvem (ficam só no aparelho) — é o que mantém o
-documento dentro do limite de 1 MB.
+documento dentro do limite de 1 MB. O app mede o tamanho do `payload` a cada
+envio: avisa acima de ~800 KB e, acima de 1 MB, para de sincronizar com o chip
+em vermelho ("Nuvem: dados acima de 1 MB") em vez de fingir que é falta de
+internet — os dados continuam salvos no aparelho.
+
+## Como a sincronização funciona (desde 04/09/2026)
+
+Não é mais "quem grava por último ganha". Cada aparelho guarda a **base** (o
+último estado que confirmou em comum com a nuvem) e:
+
+- **ao receber** um snapshot, faz um *merge de 3 vias* (base × local × nuvem)
+  por obra, semana, funcionário, etapa, diário, despesa e campo. Só o que mudou
+  **dos dois lados no mesmo campo** é conflito: fica a versão do aparelho que
+  está olhando, e o valor descartado vai para a lista `conflitos` (no
+  documento e no `localStorage`), com aviso nos dois aparelhos — o chip da
+  nuvem fica vermelho com "⚠ N conflitos — toque para ver";
+- **ao gravar**, usa uma transação: lê o documento atual e, se a nuvem mudou
+  desde a base, mescla **antes** de escrever e sobe `rev + 1`. Sem internet a
+  transação falha e a gravação fica pendente até o evento `online`;
+- um aparelho novo (só com a obra de exemplo vazia) simplesmente adota a nuvem.
+
+Exclusões seguem a regra natural: item apagado de um lado e **não mexido** do
+outro some dos dois; apagado de um lado e **editado** do outro volta (com
+registro de conflito), porque perder edição é pior que ver um item a mais.
 
 ## Configuração no console — 2 passos, ~2 min
 
